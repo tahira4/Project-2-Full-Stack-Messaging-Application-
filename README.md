@@ -25,7 +25,16 @@ This implements the assignment’s **Steps 1–10** and adds **payload caps** + 
 9. **Decryption (Server)** – Server decrypts **AES-GCM** and returns **plaintext (Base64)**.
 10. **Deserialization (Client)** – Client decodes Base64 → JSON → **`Student` object**.
 
-**Defense-in-Depth:** request IDs (header + JSON), JSON body size limit, Base64 length caps, sessionID validation.
+**Defense-in-Depth:** 
+
+* **Request IDs** added to every response (header + JSON).
+
+* **Body size limit** (8kb) and Base64 length caps for inputs.
+
+* AES-GCM 12-byte nonce + 16-byte tag.
+
+* Validations for **session ID and AES key** length (32 bytes).
+
 ## Project Structure
 
 server.js        # REST API (Steps 1–5, 8–9) + safety controls
@@ -38,7 +47,7 @@ README.md
 
 * **Node.js 18+** (uses global `fetch`).
 
-  * If Node < 18, install `node-fetch@2` and uncomment it in `client.js`.
+  * If Node < 18, install `node-fetch@2`.
 *  No external databases needed (sessions are in memory).
 
 ## Install
@@ -154,7 +163,7 @@ json
   "message": "HMAC verification failed (tampered?)"
 }
 
-## 🔐 Cryptography Details
+## Cryptography Details
 
 * **RSA-2048** key pair generated at server startup (`crypto.generateKeyPairSync`).
 * **OAEP-SHA256** for encrypting the AES session key (modern padding).
@@ -198,7 +207,7 @@ Quick health: demo JSON (server-side serialization)
 
 curl -s http://localhost:8080/student | jq .
 
-## 🪲 Troubleshooting
+## Troubleshooting
 
 * **`fetch is not defined`** → Use Node 18+, or `npm i node-fetch@2` and import it in `client.js`.
 * **`session error` / `message error`** → Check Base64 sizes vs the caps and field names.
