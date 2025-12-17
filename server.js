@@ -1,5 +1,4 @@
-/**
- * server.js
+/**  server.js
  * ----------
  * Role: Secure REST server for the full-stack messaging project.
  *
@@ -18,7 +17,6 @@
  *   • Body size limit, Base64 length caps
  *   • Constant-time HMAC compare (timingSafeEqual)
  *   • AES-256-GCM with 12-byte nonce and 16-byte tag (ciphertext||tag format)
-
  * Run:
  *   node server.js
  */
@@ -32,7 +30,6 @@ const app = express();
 /* -------------------------------------------------------------------------- */
 /*                            GLOBAL SAFETY CONTROLS                           */
 /* -------------------------------------------------------------------------- */
-
 /**
  * Parse JSON bodies with a conservative size cap.
  * - Protects against accidental huge posts.
@@ -92,18 +89,14 @@ const sessions = new Map();
 /*                       BASE64 INPUT CAPS (DEFENSE-IN-DEPTH)                 */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Rough upper bounds for Base64 inputs (defense-in-depth):
- *  - RSA-2048 ciphertext: 256 bytes → ~344 Base64 chars (we cap at 600)
- *  - AES-GCM nonce:        12 bytes → 16 Base64 chars (cap 64)
- *  - HMAC-SHA256:          32 bytes → 44 Base64 chars (cap 128)
- *  - Ciphertext (data||tag): small for our demo → cap 8192 chars
- */
+// Rough upper bounds for Base64 inputs (defense-in-depth):
+
 const CAPS = {
-  encryptedKeyB64Max: 600,
-  nonceB64Max:        64,
-  hmacB64Max:        128,
-  ciphertextB64Max: 8192,
+  encryptedKeyB64Max: 600, //- RSA-2048 ciphertext: 256 bytes → ~344 Base64 chars (we cap at 600)
+  nonceB64Max:        64,  // - AES-GCM nonce:        12 bytes → 16 Base64 chars (cap 64)
+  hmacB64Max:        128,  // - HMAC-SHA256:          32 bytes → 44 Base64 chars (cap 128)
+  ciphertextB64Max: 8192,  //  - Ciphertext (data||tag): small for our demo → cap 8192 chars
+ 
 };
 
 /**
@@ -165,19 +158,17 @@ app.post("/session", (req, res) => {
 
     // Decrypt session key with server's private RSA key (OAEP-SHA256).
     const symmKey = crypto.privateDecrypt(
-      { key: privateKey, oaepHash: "sha256" },
+      { key: privateKey, oaepHash: "sha256" }, //  Decrypt with the private key → only the server can unwrap the symmetric key.
       ciphertext
-    ); 
-    //Uses RSA-OAEP with SHA-256 (secure padding & hash).
-    // Because this is private key decryption, only the server can recover the inner plaintext 
-    // (which should be the client’s symmetric AES key).
+    ); //Uses RSA-OAEP with SHA-256 (secure padding & hash). Because this is private key decryption,
+    //  only the server can recover the inner plaintext (which should be the client’s symmetric AES key).
 
     // Expect that the recovered key is exactly 32 bytes (AES-256).
     if (symmKey.length !== 32) {
       return reply(res, 400, { error: "invalid symmetric key length (need 32 bytes for AES-256)" });
     }
 
-    // Create a session and store the key.
+    // Generates a random session ID and maps it to the validated 32-byte AES key.
     const sessionID = crypto.randomBytes(16).toString("hex"); // map it to 32 bytes AES key, 32 hex chars
     sessions.set(sessionID, symmKey);
 
@@ -192,11 +183,11 @@ app.post("/session", (req, res) => {
 /* -------------------------------------------------------------------------- */
 /*                     HELPERS — HMAC + AES-GCM DECRYPTION                    */
 /* -------------------------------------------------------------------------- */
-
 /** HMAC-SHA256(key, data) → Buffer(32) */
 const computeHMACSHA256 = (key, data) =>
-  crypto.createHmac("sha256", key).update(data).digest();
-
+  crypto.createHmac("sha256", key      //  create an HMAC object that will use SHA-256 secret key (the shared AES session key)
+    //  .update(data): feed the exact bytes we want to protect (ciphertext).
+                   ).update(data).digest();  // .digest(): finish and return the 32-byte HMAC value (Buffer length 32).
 /**
  * AES-256-GCM decryption where ciphertext is (data || 16-byte tag).
  * @param {Buffer} key   32-byte AES key
@@ -205,16 +196,16 @@ const computeHMACSHA256 = (key, data) =>
  * @returns {Buffer} plaintext
  */
 function decryptAESGCM(key, nonce, cipherAndTag) {
-  if (cipherAndTag.length < 16) throw new Error("ciphertext too short");
-  const tag  = cipherAndTag.slice(-16);      // last 16 bytes
-  const data = cipherAndTag.slice(0, -16);   // everything before the tag
+  if (cipherAndTag.length < 16) throw new Error("ciphertext too short");  // there must be at least room for the tag
+  const tag  = cipherAndTag.slice(-16);      // extract the last 16 bytes as the GCM tag.
+  const data = cipherAndTag.slice(0, -16);   // everything before the tag is the ciphertext bytes.
+  // set up a GCM decryptor with key and nonce.
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, nonce);
-  decipher.setAuthTag(tag);
-  const p1 = decipher.update(data);
+  decipher.setAuthTag(tag);  // give it the tag so GCM can verify integrity during decrypt.
+  const p1 = decipher.update(data); // decrypt. If the tag is wrong (message/nonce/key corrupted), .final() throws.
   const p2 = decipher.final();
-  return Buffer.concat([p1, p2]);
+  return Buffer.concat([p1, p2]); //  combine the partial/plaintext chunks into the final plaintext.
 }
-
 /* -------------------------------------------------------------------------- */
 /*            STEPS 8 & 9 — VERIFY HMAC, THEN DECRYPT AES-GCM                 */
 /* -------------------------------------------------------------------------- */
@@ -233,8 +224,7 @@ function decryptAESGCM(key, nonce, cipherAndTag) {
  *     validHMAC:   true,
  *     message:     "HMAC verified; decryption successful",
  *     plaintextB64:"<base64 of JSON>"
- *   }
- */
+ *   }*/
 app.post("/message", (req, res) => {                 // Define POST /message endpoint to receive encrypted payloads
   try {                                              // Start try/catch so any runtime error returns a clean JSON error
     const { sessionID, ciphertext, nonce, hmac } =   // Destructure expected fields from the JSON body (or {} if body missing)
@@ -296,7 +286,6 @@ app.post("/message", (req, res) => {                 // Define POST /message end
     });
   }
 });
-
 /* -------------------------------------------------------------------------- */
 /*                                  BOOT                                      */
 /* -------------------------------------------------------------------------- */
@@ -307,5 +296,4 @@ app.listen(PORT, () => {                             // Start the HTTP server
   console.log(`[server] RSA pubkey fingerprint (SHA256 b64): ${pubKeyFP}`); // Show public key fingerprint for audit
   console.log(`[server] try: curl http://localhost:${PORT}/publicKey`);     // Quick test hint for the demo
 });
-
 module.exports = { sessions };
