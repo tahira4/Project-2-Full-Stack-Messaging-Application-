@@ -1,0 +1,13 @@
+{
+  "name": "secure-messenger",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "server": "node server.js",
+    "client": "node client.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-fetch": "^2.6.7"
+  }
+}
